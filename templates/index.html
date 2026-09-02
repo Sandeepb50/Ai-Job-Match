@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ai job match assistant</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        body {
+            background-color: #f4f6f9;
+            color: #333;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 24px;
+            color: #1a202c;
+            text-transform: capitalize;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+        textarea {
+            width: 100%;
+            height: 140px;
+            padding: 12px;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 14px;
+            resize: vertical;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #3182ce;
+            box-shadow: 0 0 0 2px rgba(49, 130, 206, 0.2);
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background-color: #3182ce;
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        button:hover:not(:disabled) {
+            background-color: #2b6cb0;
+        }
+        button:disabled {
+            background-color: #a0aec0;
+            cursor: not-allowed;
+        }
+        #result-section {
+            margin-top: 24px;
+            padding: 20px;
+            border-radius: 6px;
+            background-color: #edf2f7;
+            min-height: 50px;
+            display: none;
+        }
+        .result-group {
+            margin-bottom: 16px;
+        }
+        .result-group:last-child {
+            margin-bottom: 0;
+        }
+        .result-title {
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 6px;
+            font-size: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .result-content {
+            color: #4a5568;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .score-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2b6cb0;
+        }
+        .skills-list {
+            list-style-type: disc;
+            padding-left: 20px;
+        }
+        .error-message {
+            color: #e53e3e;
+            font-weight: 600;
+        }
+        .loading-text {
+            color: #4a5568;
+            font-style: italic;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ai job match assistant</h1>
+        
+        <form id="match-form" onsubmit="return false;">
+            <div class="form-group">
+                <label for="resume">Resume</label>
+                <div style="margin-bottom: 8px;">
+                    <input type="file" id="resume-pdf" accept=".pdf">
+                    <button type="button" id="upload-pdf-btn" style="display:inline-block; width:auto; padding: 6px 12px; font-size: 14px;">Upload PDF</button>
+                </div>
+                <textarea id="resume" name="resume" placeholder="Paste resume here..."></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="job-description">Job Description</label>
+                <textarea id="job-description" name="job_description" placeholder="Paste job description here..."></textarea>
+            </div>
+            
+            <button type="button" id="analyze-button">Analyze Match</button>
+        </form>
+
+        <div id="result-section">
+            <!-- Result displayed here -->
+        </div>
+    </div>
+
+    <script>
+        const analyzeBtn = document.getElementById('analyze-button');
+        const resumeInput = document.getElementById('resume');
+        const jobDescInput = document.getElementById('job-description');
+        const resultSection = document.getElementById('result-section');
+        const uploadPdfBtn = document.getElementById('upload-pdf-btn');
+        const resumePdfInput = document.getElementById('resume-pdf');
+
+        uploadPdfBtn.addEventListener('click', async () => {
+            const file = resumePdfInput.files[0];
+            if (!file) return;
+
+            uploadPdfBtn.disabled = true;
+            uploadPdfBtn.textContent = 'Uploading...';
+
+            const formData = new FormData();
+            formData.append('resume_pdf', file);
+
+            try {
+                const response = await fetch('/api/extract-resume', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    resumeInput.value = data.resume_text;
+                } else {
+                    alert('Extraction failed: ' + (data.message || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Request failed: ' + err.message);
+            } finally {
+                uploadPdfBtn.disabled = false;
+                uploadPdfBtn.textContent = 'Upload PDF';
+            }
+        });
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function renderList(items) {
+            if (!items || items.length === 0) {
+                return '<p class="result-content">None</p>';
+            }
+            return '<ul class="skills-list">' + items.map(item => '<li>' + escapeHtml(item) + '</li>').join('') + '</ul>';
+        }
+
+        analyzeBtn.addEventListener('click', async () => {
+            const resume = resumeInput.value;
+            const jobDescription = jobDescInput.value;
+
+            if (!resume.trim() || !jobDescription.trim()) {
+                resultSection.style.display = 'block';
+                resultSection.innerHTML = '<p class="error-message">Please provide both Resume and Job Description.</p>';
+                return;
+            }
+
+            analyzeBtn.disabled = true;
+            analyzeBtn.textContent = 'Analyzing...';
+            resultSection.style.display = 'block';
+            resultSection.innerHTML = '<p class="loading-text">Analyzing...</p>';
+
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        resume: resume,
+                        job_description: jobDescription
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    resultSection.innerHTML = `<p class="error-message">${escapeHtml(data.message || 'Analysis failed. Please try again.')}</p>`;
+                    return;
+                }
+
+                resultSection.innerHTML = `
+                    <div class="result-group">
+                        <div class="result-title">MATCH SCORE</div>
+                        <div class="result-content score-value">${escapeHtml(String(data.match_score))}%</div>
+                    </div>
+                    <div class="result-group">
+                        <div class="result-title">Matching Skills</div>
+                        <div class="result-content">${renderList(data.matching_skills)}</div>
+                    </div>
+                    <div class="result-group">
+                        <div class="result-title">Missing Skills</div>
+                        <div class="result-content">${renderList(data.missing_skills)}</div>
+                    </div>
+                    <div class="result-group">
+                        <div class="result-title">Experience Match</div>
+                        <div class="result-content">${escapeHtml(data.experience_match || 'N/A')}</div>
+                    </div>
+                    <div class="result-group">
+                        <div class="result-title">Gaps</div>
+                        <div class="result-content">${renderList(data.gaps)}</div>
+                    </div>
+                    <div class="result-group">
+                        <div class="result-title">Recommendations</div>
+                        <div class="result-content">${renderList(data.recommendations)}</div>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 16px;">
+                        <button type="button" id="improve-btn">Improve My Resume</button>
+                        <button type="button" id="explain-btn">Explain My Match</button>
+                    </div>
+                    <div id="extra-result" style="margin-top: 20px;"></div>
+                `;
+
+                document.getElementById('improve-btn').addEventListener('click', async () => {
+                    const improveBtn = document.getElementById('improve-btn');
+                    improveBtn.disabled = true;
+                    improveBtn.textContent = 'Improving...';
+                    try {
+                        const res = await fetch('/api/improve-resume', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                resume: resume,
+                                gaps: data.gaps,
+                                recommendations: data.recommendations
+                            })
+                        });
+                        const resData = await res.json();
+                        const extra = document.getElementById('extra-result');
+                        if (res.ok && resData.success) {
+                            extra.innerHTML = '<div class="result-title">Improved Sections</div><div class="result-content" style="white-space: pre-wrap;">' + escapeHtml(resData.improved_sections) + '</div>';
+                        } else {
+                            extra.innerHTML = '<p class="error-message">Failed to improve.</p>';
+                        }
+                    } catch (e) {
+                        document.getElementById('extra-result').innerHTML = '<p class="error-message">Error improving.</p>';
+                    } finally {
+                        improveBtn.disabled = false;
+                        improveBtn.textContent = 'Improve My Resume';
+                    }
+                });
+
+                document.getElementById('explain-btn').addEventListener('click', async () => {
+                    const explainBtn = document.getElementById('explain-btn');
+                    explainBtn.disabled = true;
+                    explainBtn.textContent = 'Explaining...';
+                    try {
+                        const res = await fetch('/api/explain-match', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                resume: resume,
+                                job_description: jobDescription,
+                                analysis_result: data
+                            })
+                        });
+                        const resData = await res.json();
+                        const extra = document.getElementById('extra-result');
+                        if (res.ok && resData.success) {
+                            extra.innerHTML = '<div class="result-title">Explanation</div><div class="result-content" style="white-space: pre-wrap;">' + escapeHtml(resData.explanation) + '</div>';
+                        } else {
+                            extra.innerHTML = '<p class="error-message">Failed to explain.</p>';
+                        }
+                    } catch (e) {
+                        document.getElementById('extra-result').innerHTML = '<p class="error-message">Error explaining.</p>';
+                    } finally {
+                        explainBtn.disabled = false;
+                        explainBtn.textContent = 'Explain My Match';
+                    }
+                });
+
+            } catch (err) {
+                resultSection.innerHTML = `<p class="error-message">Request failed: ${escapeHtml(err.message || 'Network error')}</p>`;
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.textContent = 'Analyze Match';
+            }
+        });
+    </script>
+</body>
+</html>
